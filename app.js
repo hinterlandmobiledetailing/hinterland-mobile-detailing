@@ -88,18 +88,131 @@
   });
   $$('.cat-item').forEach((el, i) => el.style.setProperty('--d', (i * 0.05) + 's'));
 
-  // ░ Marquee sliders: duplicate the items once for a seamless loop ░
-  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    $$('[data-marquee] .slider__track').forEach(track => {
-      Array.from(track.children).forEach(child => {
+  // ░ Carousels (add-ons, gallery, reviews) ░
+  // Slow auto-scroll on a real scroll container, so visitors can also swipe
+  // (touch), drag (mouse), use the trackpad or the ‹ › arrows to go faster.
+  // The items are tripled; the scroll position is kept in the middle copy so
+  // the loop is seamless in both directions.
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const arrowSvg = d => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+
+  $$('[data-marquee]').forEach(slider => {
+    const track = slider.querySelector('.slider__track');
+    const originals = Array.from(track.children);
+    for (let k = 0; k < 2; k++) {
+      originals.forEach(child => {
         const clone = child.cloneNode(true);
         clone.setAttribute('aria-hidden', 'true');
         clone.removeAttribute('id');
         clone.querySelectorAll('a, button').forEach(el => el.setAttribute('tabindex', '-1'));
         track.appendChild(clone);
       });
+    }
+    track.querySelectorAll('img').forEach(img => img.setAttribute('draggable', 'false'));
+
+    // Wrapper holding the arrows (the slider itself scrolls)
+    const wrap = document.createElement('div');
+    wrap.className = 'slider-wrap';
+    slider.before(wrap);
+    wrap.appendChild(slider);
+    wrap.style.marginTop = getComputedStyle(slider).marginTop;
+    slider.style.marginTop = '0';
+    const prev = document.createElement('button');
+    const next = document.createElement('button');
+    prev.type = next.type = 'button';
+    prev.className = 'slider__arrow slider__arrow--prev';
+    next.className = 'slider__arrow slider__arrow--next';
+    prev.setAttribute('aria-label', 'Previous');
+    next.setAttribute('aria-label', 'Next');
+    prev.innerHTML = arrowSvg('M15 18l-6-6 6-6');
+    next.innerHTML = arrowSvg('M9 18l6-6-6-6');
+    wrap.append(prev, next);
+
+    const set = () => track.scrollWidth / 3;          // width of one copy
+    const durationSec = parseFloat(getComputedStyle(slider).getPropertyValue('--speed')) || 70;
+    let pos = 0;
+    const normalize = () => {
+      const H = set();
+      let s = slider.scrollLeft;
+      while (s >= 2 * H) s -= H;
+      while (s < H) s += H;
+      if (s !== slider.scrollLeft) slider.scrollLeft = s;
+      pos = slider.scrollLeft;
+    };
+    requestAnimationFrame(() => { slider.scrollLeft = set(); pos = slider.scrollLeft; });
+
+    // Pause while the visitor is hovering / touching / dragging, resume after
+    let hovering = false, holdUntil = 0, visible = true;
+    const hold = (ms = 2500) => { holdUntil = performance.now() + ms; };
+    slider.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') hovering = true; });
+    slider.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { hovering = false; normalize(); } });
+    slider.addEventListener('touchstart', () => hold(4000), { passive: true });
+    slider.addEventListener('wheel', e => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) hold(); }, { passive: true });
+    let idle;
+    slider.addEventListener('scroll', () => {
+      clearTimeout(idle);
+      idle = setTimeout(normalize, 250);
+    }, { passive: true });
+    new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(slider);
+
+    // Mouse drag
+    let drag = null, moved = false;
+    slider.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      drag = { x: e.clientX, s: slider.scrollLeft };
+      moved = false;
+      slider.setPointerCapture(e.pointerId);
+      slider.classList.add('is-dragging');
     });
-  }
+    slider.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (Math.abs(dx) > 4) moved = true;
+      slider.scrollLeft = drag.s - dx;
+    });
+    const endDrag = () => {
+      if (!drag) return;
+      drag = null;
+      slider.classList.remove('is-dragging');
+      normalize();
+      hold();
+    };
+    slider.addEventListener('pointerup', endDrag);
+    slider.addEventListener('pointercancel', endDrag);
+    slider.addEventListener('click', e => { if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
+
+    // Arrows: one "page" per click, with room made beforehand so the
+    // smooth scroll never hits the end of the copies
+    const page = dir => {
+      const H = set();
+      const step = Math.max(240, slider.clientWidth * 0.75);
+      const max = 3 * H - slider.clientWidth;
+      if (dir > 0 && slider.scrollLeft + step > max) slider.scrollLeft -= H;
+      if (dir < 0 && slider.scrollLeft - step < 0) slider.scrollLeft += H;
+      hold(3500);
+      slider.scrollBy({ left: dir * step, behavior: 'smooth' });
+    };
+    prev.addEventListener('click', () => page(-1));
+    next.addEventListener('click', () => page(1));
+
+    // Auto-scroll loop
+    let last = performance.now();
+    const tick = now => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const H = set();
+      const running = !reduceMotion && visible && !hovering && !drag && now > holdUntil && H > 0;
+      if (running) {
+        pos += (H / durationSec) * dt;
+        if (pos >= 2 * H) pos -= H;
+        slider.scrollLeft = pos;
+      } else {
+        pos = slider.scrollLeft;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 
   // ░ Counter animation (hero stats) ░
   const counters = $$('[data-count]');

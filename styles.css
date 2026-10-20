@@ -954,24 +954,45 @@ html.modal-open { overflow: hidden; }
   cursor: pointer;
 }
 
-/* ▍Slow horizontal marquee (add-ons, gallery, reviews) — pauses on hover */
+/* ▍Carousels (add-ons, gallery, reviews): slow auto-scroll, swipe, drag, arrows */
+.slider-wrap { position: relative; }
 .slider {
-  overflow: hidden;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  cursor: grab;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
           mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
 }
+.slider::-webkit-scrollbar { display: none; }
+.slider.is-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+.slider img { -webkit-user-drag: none; user-select: none; }
 .slider__track {
   display: flex; align-items: stretch;
   width: max-content;
   padding: 6px 0 24px;
-  animation: marquee var(--speed, 70s) linear infinite;
 }
-.slider:hover .slider__track,
-.slider:focus-within .slider__track { animation-play-state: paused; }
-@keyframes marquee { to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) {
-  .slider { overflow-x: auto; -webkit-mask-image: none; mask-image: none; }
-  .slider__track { animation: none; }
+.slider__arrow {
+  position: absolute; top: calc(50% - 9px); z-index: 2;
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: var(--green-ink);
+  background: rgba(250,248,242,0.9);
+  border: 1px solid rgba(255,255,255,0.7);
+  box-shadow: 0 8px 22px -10px rgba(14,15,13,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.slider__arrow:hover { background: #fff; }
+.slider__arrow--prev { left: 10px; }
+.slider__arrow--next { right: 10px; }
+@media (max-width: 760px) {
+  .slider__arrow { width: 36px; height: 36px; }
+  .slider__arrow--prev { left: 6px; }
+  .slider__arrow--next { right: 6px; }
 }
 
 /* ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
